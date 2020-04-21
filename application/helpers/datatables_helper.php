@@ -54,6 +54,7 @@ function data_tables_init($aColumns, $sIndexColumn, $sTable, $join = [], $where 
     if ($CI->input->post('order')) {
         $sOrder = 'ORDER BY ';
         foreach ($CI->input->post('order') as $key => $val) {
+            // print_r($val); echo "<br/>";
             $columnName = $aColumns[intval($__post['order'][$key]['column'])];
             $dir        = strtoupper($__post['order'][$key]['dir']);
 
