@@ -6,6 +6,7 @@ class Contract extends ClientsController
 {
     public function index($id, $hash)
     {
+        
         check_contract_restrictions($id, $hash);
         $contract = $this->contracts_model->get($id);
 
@@ -27,6 +28,7 @@ class Contract extends ClientsController
 
                     break;
             case 'sign_contract':
+
                     process_digital_signature_image($this->input->post('signature', false), CONTRACTS_UPLOADS_FOLDER . $id);
                     $this->db->where('id', $id);
                     $this->db->update(db_prefix().'contracts', array_merge(get_acceptance_info_array(), [

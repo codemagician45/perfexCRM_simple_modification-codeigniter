@@ -37,11 +37,13 @@ class Tasks extends AdminController
         }
 
         $data['title'] = _l('tasks');
+        // print_r($data); exit();
         $this->load->view('admin/tasks/manage', $data);
     }
 
     public function table()
     {
+        // print_r("expression"); exit();
         $this->app->get_table_data('tasks');
     }
 
@@ -142,6 +144,7 @@ class Tasks extends AdminController
 
     public function detailed_overview()
     {
+        // if($_POST) { print_r($_POST);}
         $overview = [];
 
         $has_permission_create = has_permission('tasks', '', 'create');
@@ -261,6 +264,8 @@ class Tasks extends AdminController
         $data['years']    = $this->tasks_model->get_distinct_tasks_years(($this->input->post('month_from') ? $this->input->post('month_from') : 'startdate'));
         $data['staff_id'] = $overview['staff_id'];
         $data['title']    = _l('detailed_overview');
+        // if(isset($_POST['member']))
+        // print_r($data['overview']); exit();
         $this->load->view('admin/tasks/detailed_overview', $data);
     }
 

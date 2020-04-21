@@ -19,6 +19,7 @@ class Reports extends AdminController
         }
         $this->ci = &get_instance();
         $this->load->model('reports_model');
+        $this->load->model('tickets_model');
     }
 
     /* No access on this url */
@@ -1356,5 +1357,185 @@ class Reports extends AdminController
     private function distinct_taxes($rel_type)
     {
         return $this->db->query('SELECT DISTINCT taxname,taxrate FROM ' . db_prefix() . "item_tax WHERE rel_type='" . $rel_type . "' ORDER BY taxname ASC")->result_array();
+    }
+
+    public function tasks(){
+
+        $overview = [];
+
+        $has_permission_create = has_permission('tasks', '', 'create');
+        $has_permission_view   = has_permission('tasks', '', 'view');
+
+        if (!$has_permission_view) {
+            $staff_id = get_staff_user_id();
+        } elseif ($this->input->post('member')) {
+            $staff_id = $this->input->post('member');
+        } else {
+            $staff_id = '';
+        }
+
+        $month = ($this->input->post('month') ? $this->input->post('month') : date('m'));
+        if ($this->input->post() && $this->input->post('month') == '') {
+            $month = '';
+        }
+
+        $status = $this->input->post('status');
+
+        $fetch_month_from = 'startdate';
+
+        $customer  = ($this->input->post('customer') ? $this->input->post('customer') : null);
+        $project_id = $this->input->get('project_id');
+
+        for ($m = 1; $m <= 12; $m++) {
+            if ($month != '' && $month != $m) {
+                continue;
+            }
+            // Task rel_name
+            $sqlTasksSelect = '*,' . tasks_rel_name_select_query() . ' as rel_name';
+            // Task assignees
+            $sqlTasksSelect .= ',' . get_sql_select_task_asignees_full_names() . ' as assignees' . ',' . get_sql_select_task_assignees_ids() . ' as assignees_ids';
+            $sqlTasksSelect .=',' .'(SELECT GROUP_CONCAT(name SEPARATOR ",") FROM ' . db_prefix() . 'taggables JOIN ' . db_prefix() . 'tags ON ' . db_prefix() . 'taggables.tag_id = ' . db_prefix() . 'tags.id WHERE rel_id = ' . db_prefix() . 'tasks.id and rel_type="task" ORDER by tag_order ASC) as tags';
+            
+            $this->db->select($sqlTasksSelect);
+            $this->db->where('MONTH(' . $fetch_month_from . ')', $m);
+            
+            if ($project_id && $project_id != '') {
+                $this->db->where('rel_id', $project_id);
+                $this->db->where('rel_type', 'project');
+            }
+
+            if (!$has_permission_view) {
+                $sqlWhereStaff = '(id IN (SELECT taskid FROM ' . db_prefix() . 'task_assigned WHERE staffid=' . $staff_id . ')';
+
+                // User dont have permission for view but have for create
+                // Only show tasks createad by this user.
+                if ($has_permission_create) {
+                    $sqlWhereStaff .= ' OR addedfrom=' . get_staff_user_id();
+                }
+
+                $sqlWhereStaff .= ')';
+                $this->db->where($sqlWhereStaff);
+            } elseif ($has_permission_view) {
+                if (is_numeric($staff_id)) {
+                    $this->db->where('(id IN (SELECT taskid FROM ' . db_prefix() . 'task_assigned WHERE staffid=' . $staff_id . '))');
+                }
+            }
+            // print_r($sqlWhereStaff);
+            if ($status) {
+                $this->db->where('status', $status);
+            }
+            if ($customer) {
+                $array = array('rel_type' => 'customer', 'rel_id' => $customer);
+                $this->db->where($array);
+            }
+            
+            $this->db->order_by($fetch_month_from, 'ASC');
+            array_push($overview, $m);
+            $overview[$m] = $this->db->get(db_prefix() . 'tasks')->result_array();
+            // print_r($overview); exit();
+        }
+
+        unset($overview[0]);
+
+        $overview = [
+            'staff_id' => $staff_id,
+            'detailed' => $overview,
+        ];
+
+        $data['members']  = $this->staff_model->get();
+        $data['overview'] = $overview['detailed'];
+        $data['customers'] = $this->clients_model->get();
+        $data['staff_id'] = $overview['staff_id'];
+        $data['title']    = _l('task_report');
+        
+        $this->load->view('admin/reports/tasks',$data);
+    }
+
+    public function tasks_table(){
+        $this->app->get_table_data('tasks-reports');
+    }
+
+    public function tickets(){
+        $overview = [];
+
+        $has_permission_create = has_permission('tickets', '', 'create');
+        $has_permission_view   = has_permission('tickets', '', 'view');
+
+        if (!$has_permission_view) {
+            $staff_id = get_staff_user_id();
+        } elseif ($this->input->post('member')) {
+            $staff_id = $this->input->post('member');
+        } else {
+            $staff_id = '';
+        }
+
+        $month = ($this->input->post('month') ? $this->input->post('month') : date('m'));
+        if ($this->input->post() && $this->input->post('month') == '') {
+            $month = '';
+        }
+
+        $status = $this->input->post('status');
+
+        $fetch_month_from = 'date';
+
+        $customer  = ($this->input->post('customer') ? $this->input->post('customer') : null);
+        // $project_id = $this->input->get('project_id');
+
+        for ($m = 1; $m <= 12; $m++) {
+            if ($month != '' && $month != $m) {
+                continue;
+            }
+
+            
+            $sqlTicketsSelect= '*,' .get_sql_select_ticket_customer_name(). 'as company';
+            $sqlTicketsSelect.= ','.get_sql_select_ticket_tags(). 'as tags';
+            $sqlTicketsSelect .= ','.get_sql_select_ticket_department_name() . ' as department_name';
+            $sqlTicketsSelect.= ','.get_sql_select_contact(). 'as contact_name';
+            $sqlTicketsSelect.= ','.get_sql_select_ticket_service_name(). 'as service_name';
+            $sqlTicketsSelect.= ','.get_sql_select_assignees(). 'as assignees';
+            $sqlTicketsSelect.= ','.get_sql_select_ticket_status_name(). 'as status_name';
+            $sqlTicketsSelect.= ','.get_sql_select_ticket_status_color(). 'as status_color';
+            $sqlTicketsSelect.= ','.get_sql_select_ticket_priority_name(). 'as priority_name';
+            // print_r($sqlTicketsSelect); exit();
+            $this->db->select($sqlTicketsSelect);
+
+            if (is_numeric($staff_id)) {
+                    $this->db->where('assigned',$staff_id);
+                }
+
+            if ($status) {
+                $this->db->where('status', $status);
+            }
+            if ($customer) {
+                $array = array('rel_type' => 'customer', 'rel_id' => $customer);
+                $this->db->where($array);
+            }
+
+            $this->db->order_by($fetch_month_from, 'ASC');
+            array_push($overview, $m);
+           
+            $overview[$m] = $this->db->get(db_prefix() . 'tickets')->result_array();
+            // $overview[$m] = $this->tickets_model->get();
+            // print_r($overview); exit(); 
+        }
+        // print_r($overview); exit();
+        unset($overview[0]);
+
+        $overview = [
+            'staff_id' => $staff_id,
+            'detailed' => $overview,
+        ];
+
+        $data['members']  = $this->staff_model->get();
+        $data['overview'] = $overview['detailed'];
+        $data['staff_id'] = $overview['staff_id'];
+        $data['customers'] = $this->clients_model->get();
+        $data['tickets_statuses'] = $this->tickets_model->get_ticket_status();
+        $data['title']    = _l('ticket_report');
+        
+        $this->load->view('admin/reports/tickets',$data);
+    }
+    public function tickets_table(){
+        $this->app->get_table_data('tickets-reports');
     }
 }
